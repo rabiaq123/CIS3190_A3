@@ -22,6 +22,7 @@ working-storage section.
 01 ws-fname                pic x(30).
 01 feof                    pic 9.
 01 i                       pic 9(2).
+01 num-entries             pic 9(2).
 01 isbns                   occurs 50 times.
     02 ws-isbn             pic x(10).
 01 file-info.
@@ -45,8 +46,19 @@ working-storage section.
 procedure division.
     perform display-program-header.
     perform readISBN.
+    perform checkSUM through isValid
+        varying i from 1 by 1
+        until i > num-entries
     perform display-end-message.
 stop run.
+
+checkSUM.
+    display space.
+    display "checksum".
+
+isValid.
+    display space.
+    display "isValid".
 
 readISBN.
     *> perform error checking for invalid input filename
@@ -54,15 +66,16 @@ readISBN.
     display space.
     perform get-filename until file-status=0.
     *> open and read input file
-    move 1 to i.
+    move 1 to num-entries.
     open input input-file.
     perform store-isbns until feof=1.
     close input-file.
+    subtract 1 from num-entries.
     *> checking whether ISBNs are being stored properly
     display space.
     perform display-isbns 
-       varying i from 1 by 1 
-       until i > 10.
+        varying i from 1 by 1 
+        until i > num-entries.
 
 display-isbns.
     display i.
@@ -71,10 +84,10 @@ display-isbns.
 store-isbns.
     read input-file at end move 1 to feof
         not at end
-           move isbn-record to isbns(i)
-           add 1 to i
+            move isbn-record to isbns(num-entries)
+            add 1 to num-entries
     end-read.
-       
+
 get-filename.
     display "Enter the filename to read ISBNs from: " with no advancing.
     accept ws-fname.
