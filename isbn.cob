@@ -46,19 +46,33 @@ working-storage section.
 procedure division.
     perform display-program-header.
     perform readISBN.
-    perform checkSUM through isValid
+    perform isValid through checkSUM
         varying i from 1 by 1
         until i > num-entries
     perform display-end-message.
 stop run.
 
-checkSUM.
-    display space.
-    display "checksum".
-
 isValid.
     display space.
     display "isValid".
+    *> could have different flags be set for different things
+    *> check if any of the first nine digits contain anything other than numbers
+        *> if yes, then 'incorrect, contains a non-digit'
+    *> check if the check digit is a non-digit other than X (X and x are allowed)
+        *> if yes, then 'incorrect, contains a non-digit/X in check digit'
+    *> call checkSUM to see if the value of the expected check digit matches the actual check digit value
+        *> if not, then 'correct, but not valid (invalid check digit)'
+
+    *> NOTE that incorrect is used when a non-digit value (other than X/x) is used.
+    *> X/x can only be used in the check digit's place, to represent 10.
+    *> correct is used when there is no invalid usage of a non-digit.
+    *> correct does not mean valid - if the check digit is not what it should be, the ISBN is invalid.
+
+checkSUM.
+    display space.
+    display "checkSUM".
+    *> NOTE that a remainder of 0 means 0 should be the check digit,
+    *> according to https://bisg.org/page/conversionscalculat/Conversion--Calculations-.htm.
 
 readISBN.
     *> perform error checking for invalid input filename
