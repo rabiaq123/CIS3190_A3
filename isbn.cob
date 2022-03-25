@@ -37,10 +37,15 @@ working-storage section.
         03 f-hundredths    pic x comp-x.
 01 file-status             pic 9.
 
+*> RESOURCES USED ---------------------------------------------------------------------------
+*> error handling for non-existant input files: inspired by prof's blog post on  
+    *> https://craftofcoding.wordpress.com/2021/03/22/coding-cobol-checking-a-file-exists/
+
 
 procedure division.
     perform display-program-header.
     perform readISBN.
+    perform display-end-message.
 stop run.
 
 readISBN.
@@ -75,8 +80,6 @@ get-filename.
     accept ws-fname.
     perform check-file-exists.
 
-*> inspired by prof's blog post on error handling for non-existant files 
-*> (https://craftofcoding.wordpress.com/2021/03/22/coding-cobol-checking-a-file-exists/)
 check-file-exists.
     call "CBL_CHECK_FILE_EXIST" using ws-fname file-info.
     move return-code to file-status.
@@ -84,7 +87,15 @@ check-file-exists.
         display "Error: File does not exist."
     end-if.
 
+display-end-message.
+    display space.
+    display "------------------------------".
+    display "All ISBNs have been evaluated.".
+    display "Exiting program...".
+    display "------------------------------".
+
 display-program-header.
+    display space.
     display "----------------------".
     display "ISBN-VERIFYING PROGRAM".
     display "This Cobol program determines the validity of 10-digit ISBNs from".
