@@ -10,21 +10,25 @@ environment division.
 input-output section.
 file-control.
 select input-file assign to dynamic ws-fname
-   organization is line sequential.
+    organization is line sequential.
  
 data division.
 file section.
 fd input-file.
 01 isbn-record.
-   02 isbn                 pic x(10).
+   02 line-read            pic x(10).
 
 working-storage section.
 01 ws-fname                pic x(30).
 01 feof                    pic 9.
-01 i                       pic 9(2).
+01 i                       pic 9(2). *> iterator for entries
+01 j                       pic 9(2). *> iterator for characters within an entry 
 01 num-entries             pic 9(2).
-01 isbns                   occurs 50 times.
-    02 ws-isbn             pic x(10).
+01 isbn-list.
+    02 isbn-line           occurs 50 times.
+        03 isbn-char    pic x occurs 10 times.
+*> 01 isbn-converted          pic 9(10). *> temp variable to store int version of ISBN 
+01 is-alpha-flag           pic 9 value 0. *> when set to 1, ISBN is automatically incorrect
 01 file-info.
     02 file-size           pic x(8) comp-x.
     02 file-date.
@@ -44,22 +48,30 @@ working-storage section.
 
 
 procedure division.
-    perform display-program-header.
+    perform displayProgramInfo.
     perform readISBN.
     perform isValid through checkSUM
         varying i from 1 by 1
-        until i > num-entries
-    perform display-end-message.
+        until i > num-entries.
+    perform displayEndMessage.
 stop run.
 
 isValid.
     display space.
     display "isValid".
     *> could have different flags be set for different things
+    
     *> check if any of the first nine digits contain anything other than numbers
         *> if yes, then 'incorrect, contains a non-digit'
     *> check if the check digit is a non-digit other than X (X and x are allowed)
         *> if yes, then 'incorrect, contains a non-digit/X in check digit'
+    display "in check non digit".
+    display "isbn (" i ") is: " isbn-line(i).
+    move 0 to is-alpha-flag. *> reset before reading each ISBN
+    perform checkNonDigit
+        varying j from 1 by 1
+        until j = 9.
+    
     *> call checkSUM to see if the value of the expected check digit matches the actual check digit value
         *> if not, then 'correct, but not valid (invalid check digit)'
 
@@ -67,6 +79,12 @@ isValid.
     *> X/x can only be used in the check digit's place, to represent 10.
     *> correct is used when there is no invalid usage of a non-digit.
     *> correct does not mean valid - if the check digit is not what it should be, the ISBN is invalid.
+
+checkNonDigit.
+    display "char " j " is: " isbn-char(i,j).
+    if isbn-char(i,j) is alphabetic then
+        move 1 to is-alpha-flag
+    end-if.
 
 checkSUM.
     display space.
@@ -78,50 +96,52 @@ readISBN.
     *> perform error checking for invalid input filename
     move 1 to file-status.
     display space.
-    perform get-filename until file-status=0.
+    perform getFilename until file-status=0.
     *> open and read input file
     move 1 to num-entries.
     open input input-file.
-    perform store-isbns until feof=1.
+    perform storeISBNs until feof=1.
     close input-file.
     subtract 1 from num-entries.
-    *> checking whether ISBNs are being stored properly
-    display space.
-    perform display-isbns 
-        varying i from 1 by 1 
-        until i > num-entries.
+    *> REMOVE FOR SUBMISSION checking whether ISBNs are being stored properly
+    *> display space.
+    *> perform displayISBNs 
+    *>     varying i from 1 by 1 
+    *>     until i > num-entries.
 
-display-isbns.
+*> REMOVE FOR SUBMISSION
+displayISBNs.
     display i.
-    display isbns(i).
+    display isbn-line(i).
 
-store-isbns.
+*> store all lines read in into string array/table of ISBNs
+storeISBNs.
     read input-file at end move 1 to feof
         not at end
-            move isbn-record to isbns(num-entries)
+            move isbn-record to isbn-line(num-entries)
             add 1 to num-entries
     end-read.
 
-get-filename.
+getFilename.
     display "Enter the filename to read ISBNs from: " with no advancing.
     accept ws-fname.
-    perform check-file-exists.
+    perform checkFileExists.
 
-check-file-exists.
+checkFileExists.
     call "CBL_CHECK_FILE_EXIST" using ws-fname file-info.
     move return-code to file-status.
     if return-code not =0 then
         display "Error: File does not exist."
     end-if.
 
-display-end-message.
+displayEndMessage.
     display space.
     display "------------------------------".
     display "All ISBNs have been evaluated.".
     display "Exiting program...".
     display "------------------------------".
 
-display-program-header.
+displayProgramInfo.
     display space.
     display "----------------------".
     display "ISBN-VERIFYING PROGRAM".
