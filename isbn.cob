@@ -15,7 +15,7 @@ select input-file assign to dynamic ws-fname
 data division.
 file section.
 fd input-file.
-01 isbn-record.
+01 record-read.
    02 line-read            pic x(10).
 
 working-storage section.
@@ -26,9 +26,10 @@ working-storage section.
 01 num-entries             pic 9(2).
 01 isbn-list.
     02 isbn-line           occurs 50 times.
-        03 isbn-char    pic x occurs 10 times.
+        03 isbn-char       pic x occurs 10 times.
 *> 01 isbn-converted          pic 9(10). *> temp variable to store int version of ISBN 
-01 is-alpha-flag           pic 9 value 0. *> when set to 1, ISBN is automatically incorrect
+01 is-invalid-alpha        pic 9 value 0. *> when set to 1, ISBN is automatically incorrect
+01 is-invalid-check        pic 9 value 0. *> when set to 1, ISBN is automatically incorrect
 01 file-info.
     02 file-size           pic x(8) comp-x.
     02 file-date.
@@ -50,27 +51,47 @@ working-storage section.
 procedure division.
     perform displayProgramInfo.
     perform readISBN.
-    perform isValid through checkSUM
-        varying i from 1 by 1
-        until i > num-entries.
+    perform evaluateISBN.
     perform displayEndMessage.
 stop run.
 
-isValid.
+evaluateISBN.
     display space.
-    display "isValid".
+    perform isValid through checkSUM
+        varying i from 1 by 1
+        until i > num-entries.
+
+isValid.
+    *> display space.
+    *> display "isValid".
+
     *> could have different flags be set for different things
     
     *> check if any of the first nine digits contain anything other than numbers
         *> if yes, then 'incorrect, contains a non-digit'
     *> check if the check digit is a non-digit other than X (X and x are allowed)
         *> if yes, then 'incorrect, contains a non-digit/X in check digit'
-    display "in check non digit".
-    display "isbn (" i ") is: " isbn-line(i).
-    move 0 to is-alpha-flag. *> reset before reading each ISBN
+    *> -----------------------------
+    *> display "in check non digit".
+    *> display "isbn (" i ") is: " isbn-line(i).
+    move 0 to is-invalid-alpha. *> reset after reading each ISBN
+    move 0 to is-invalid-check. *> reset after reading each ISBN
+    *> display "line number: " i.
     perform checkNonDigit
         varying j from 1 by 1
-        until j = 9.
+        until j > 10 or is-invalid-alpha = 1.
+        *> until j = 10.
+    *> display "after loop: is-invalid-alpha is " is-invalid-alpha.
+    display isbn-line(i) with no advancing
+    if is-invalid-alpha = 1 then
+        if is-invalid-check = 0 then
+            display " incorrect, contains a non-digit"
+        else 
+            display " incorrect, contains a non-digit/X in check digit"
+        end-if
+    else 
+        display " correct and valid"
+    end-if.
     
     *> call checkSUM to see if the value of the expected check digit matches the actual check digit value
         *> if not, then 'correct, but not valid (invalid check digit)'
@@ -81,14 +102,35 @@ isValid.
     *> correct does not mean valid - if the check digit is not what it should be, the ISBN is invalid.
 
 checkNonDigit.
-    display "char " j " is: " isbn-char(i,j).
     if isbn-char(i,j) is alphabetic then
-        move 1 to is-alpha-flag
+        *> display isbn-line(i)
+        move 1 to is-invalid-alpha
+        if j = 10
+            *> display "j is 10"
+            if isbn-char(i,j) not = "X" and not = "x" then
+                move 1 to is-invalid-check
+            else 
+                move 0 to is-invalid-check
+                move 0 to is-invalid-alpha *> "X" and "x" are allowed for the check digit
+            end-if
+        end-if
+        *> if j < 10 then 
+        *>     display "incorrect char at spot " j " is: " isbn-char(i,j)
+        *> else 
+        *>     if isbn-char(i,j) not = "X" and "x" then
+        *>         display "incorrect char in check digit place is: " isbn-char(i,j)
+        *>         display "incorrect, contains a non-digit/X in check digit"
+        *>     else 
+        *>         move 0 to is-invalid-alpha
+        *>     end-if
+        *> end-if
     end-if.
+    *> display "in loop: is-invalid-alpha is " is-invalid-alpha.
 
 checkSUM.
-    display space.
-    display "checkSUM".
+    *> display space.
+    *> display "checkSUM".
+
     *> NOTE that a remainder of 0 means 0 should be the check digit,
     *> according to https://bisg.org/page/conversionscalculat/Conversion--Calculations-.htm.
 
@@ -111,14 +153,13 @@ readISBN.
 
 *> REMOVE FOR SUBMISSION
 displayISBNs.
-    display i.
-    display isbn-line(i).
+    display "isbn(" i ") is " isbn-line(i).
 
 *> store all lines read in into string array/table of ISBNs
 storeISBNs.
     read input-file at end move 1 to feof
         not at end
-            move isbn-record to isbn-line(num-entries)
+            move record-read to isbn-line(num-entries)
             add 1 to num-entries
     end-read.
 
@@ -130,7 +171,7 @@ getFilename.
 checkFileExists.
     call "CBL_CHECK_FILE_EXIST" using ws-fname file-info.
     move return-code to file-status.
-    if return-code not =0 then
+    if return-code not = 0 then
         display "Error: File does not exist."
     end-if.
 
