@@ -23,13 +23,22 @@ working-storage section.
 01 feof                    pic 9.
 01 i                       pic 9(2). *> iterator for entries
 01 j                       pic 9(2). *> iterator for characters within an entry 
+01 k                       pic 9(2) value 10. *> multiplier for ISBN digits when calculating expected check digit
 01 num-entries             pic 9(2).
 01 isbn-list.
     02 isbn-line           occurs 50 times.
         03 isbn-char       pic x occurs 10 times.
-*> 01 isbn-converted          pic 9(10). *> temp variable to store int version of ISBN 
-01 is-invalid-alpha        pic 9 value 0. *> when set to 1, ISBN is automatically incorrect
-01 is-invalid-check        pic 9 value 0. *> when set to 1, ISBN is automatically incorrect
+01 flags.                  *> when set to 1, ISBN is automatically incorrect
+    02 has-invalid-alpha   pic 9 occurs 50 times.
+    02 has-invalid-check   pic 9 occurs 50 times.
+    02 has-leading-zero    pic 9 occurs 50 times.
+    02 has-trailing-zero   pic 9 occurs 50 times.
+    02 has-trailing-upperX pic 9 occurs 50 times.
+    02 has-trailing-lowerX pic 9 occurs 50 times.
+01 check-vars.             *> one element allocated for every ISBN
+    02 sum-for-check       pic 9(2) occurs 50 times value 0. *> step one of calculating expected check digit value
+    02 mod-for-check       pic 9(2) occurs 50 times value 0. *> step two of calculating expected check digit value
+    02 expected-check      pic 9(2) occurs 50 times value 0.
 01 file-info.
     02 file-size           pic x(8) comp-x.
     02 file-date.
@@ -57,82 +66,144 @@ stop run.
 
 evaluateISBN.
     display space.
+    *> loop through the following paragraphs for every ISBN
     perform isValid through checkSUM
+        varying i from 1 by 1
+        until i > num-entries.
+    *> display ISBN status based on flag status
+    perform displayStatus
         varying i from 1 by 1
         until i > num-entries.
 
 isValid.
     *> display space.
     *> display "isValid".
-
-    *> could have different flags be set for different things
     
-    *> check if any of the first nine digits contain anything other than numbers
-        *> if yes, then 'incorrect, contains a non-digit'
-    *> check if the check digit is a non-digit other than X (X and x are allowed)
-        *> if yes, then 'incorrect, contains a non-digit/X in check digit'
-    *> -----------------------------
-    *> display "in check non digit".
-    *> display "isbn (" i ") is: " isbn-line(i).
-    move 0 to is-invalid-alpha. *> reset after reading each ISBN
-    move 0 to is-invalid-check. *> reset after reading each ISBN
-    *> display "line number: " i.
-    perform checkNonDigit
+    *> reset after reading each ISBN
+    move 0 to has-invalid-alpha(i).
+    move 0 to has-invalid-check(i).
+    *> set the appropriate flags for any ISBN containing an invalid alphabetic char
+    perform checkAlpha
         varying j from 1 by 1
-        until j > 10 or is-invalid-alpha = 1.
-        *> until j = 10.
-    *> display "after loop: is-invalid-alpha is " is-invalid-alpha.
-    display isbn-line(i) with no advancing
-    if is-invalid-alpha = 1 then
-        if is-invalid-check = 0 then
-            display " incorrect, contains a non-digit"
-        else 
-            display " incorrect, contains a non-digit/X in check digit"
-        end-if
-    else 
-        display " correct and valid"
+        until j > 10 or has-invalid-alpha(i) = 1.
+
+checkLeadingAndTrailingChars.
+    move 0 to has-leading-zero(i).
+    move 0 to has-trailing-zero(i).
+    move 0 to has-trailing-upperX(i).
+    move 0 to has-trailing-lowerX(i).
+
+    if isbn-char(i,1) = 0 then
+        move 1 to has-leading-zero(i)
     end-if.
-    
-    *> call checkSUM to see if the value of the expected check digit matches the actual check digit value
-        *> if not, then 'correct, but not valid (invalid check digit)'
-
-    *> NOTE that incorrect is used when a non-digit value (other than X/x) is used.
-    *> X/x can only be used in the check digit's place, to represent 10.
-    *> correct is used when there is no invalid usage of a non-digit.
-    *> correct does not mean valid - if the check digit is not what it should be, the ISBN is invalid.
-
-checkNonDigit.
-    if isbn-char(i,j) is alphabetic then
-        *> display isbn-line(i)
-        move 1 to is-invalid-alpha
-        if j = 10
-            *> display "j is 10"
-            if isbn-char(i,j) not = "X" and not = "x" then
-                move 1 to is-invalid-check
-            else 
-                move 0 to is-invalid-check
-                move 0 to is-invalid-alpha *> "X" and "x" are allowed for the check digit
-            end-if
-        end-if
-        *> if j < 10 then 
-        *>     display "incorrect char at spot " j " is: " isbn-char(i,j)
-        *> else 
-        *>     if isbn-char(i,j) not = "X" and "x" then
-        *>         display "incorrect char in check digit place is: " isbn-char(i,j)
-        *>         display "incorrect, contains a non-digit/X in check digit"
-        *>     else 
-        *>         move 0 to is-invalid-alpha
-        *>     end-if
-        *> end-if
+    if isbn-char(i,10) = 0 then
+        move 1 to has-trailing-zero(i)
     end-if.
-    *> display "in loop: is-invalid-alpha is " is-invalid-alpha.
+    if isbn-char(i,10) = 'x' then
+        move 1 to has-trailing-lowerX(i)
+    end-if.
+    if isbn-char(i,10) = 'X' then
+        move 1 to has-trailing-upperX(i)
+    end-if.
 
+    *> perform varying j from 1 by 1 until j > 10
+    *>     if isbn-char(i,j) is numeric then
+    *>         *> first or check digit is 0
+    *>         if isbn-char(i,j) = 0 then
+    *>             if j = 1 then
+    *>                 move 1 to has-leading-zero(i)
+    *>             else if j = 10 then
+    *>                 move 1 to has-trailing-zero(i)
+    *>             end-if
+    *>         end-if
+    *>     else
+    *>         if j = 10 then
+    *>             *> X/x is check digit
+    *>             if isbn-char(i,j) = 'x' then
+    *>                 display "check x"
+    *>                 move 1 to has-trailing-lowerX(i)
+    *>             else if isbn-char(i,j) = 'X' then
+    *>                 display "check x"
+    *>                 move 1 to has-trailing-upperX(i)
+    *>             end-if
+    *>         end-if
+    *>     end-if
+    *> end-perform.
+
+*> get value of expected check digit for ISBN
 checkSUM.
     *> display space.
     *> display "checkSUM".
 
     *> NOTE that a remainder of 0 means 0 should be the check digit,
     *> according to https://bisg.org/page/conversionscalculat/Conversion--Calculations-.htm.
+
+    *> *> calculate expected check digit
+    *> perform varying j from 1 by 1 until j > 9
+    *>     *> STEP 1: calculate sum of the products of all digits multiplied by their place
+    *>     compute sum-for-check(i) = k * function numval(isbn-char(i,j))
+    *>     subtract 1 from k
+    *>     *> STEP 2: calculate remainder on division of sum by 11
+    *>     compute mod-for-check(i) = function mod(sum-for-check(i),11)
+    *>     *> STEP 3: get expected check digit
+    *>     compute expected-check(i) = 11 - mod-for-check(i)
+    *> end-perform.
+    *> *> set invalid check flag to 1 when expected check digit doesn't match check digit in ISBN
+    *> if expected-check(i) = function numval(isbn-char(i,j)) then
+    *>     move 0 to has-invalid-check(i)
+    *> else if expected-check(i) = 10 and (isbn-char(i,10) = "X" or = "x") then
+    *>     move 0 to has-invalid-check(i)
+    *> else
+    *>     move 1 to has-invalid-check(i)
+    *> end-if.
+
+checkAlpha.
+    if isbn-char(i,j) is alphabetic then
+        if j >= 1 and <= 9 then 
+            move 1 to has-invalid-alpha(i)
+        else if j = 10 *> check digit
+            if isbn-char(i,j) not = "X" and not = "x" then
+                move 1 to has-invalid-alpha(i)
+                move 1 to has-invalid-check(i)
+            else
+                move 0 to has-invalid-check(i)
+                move 0 to has-invalid-alpha(i) *> "X" and "x" are allowed for the check digit
+            end-if
+        end-if
+    end-if.
+
+displayStatus.
+    display isbn-line(i) with no advancing
+    if has-invalid-alpha(i) = 1 then
+        *> 'incorrect' is used when a non-digit value (other than X/x for the check digit) is found.
+        if has-invalid-check(i) = 0 then
+            display " incorrect, contains a non-digit"
+        else
+            display " incorrect, contains a non-digit/X in check digit"
+        end-if
+    else if has-invalid-check(i) = 1 then
+        *> 'invalid' is used when there is an unexpected check digit
+        display " correct, but not valid (invalid check digit)"
+    else
+        *> 'correct' is used when there is no invalid usage of a non-digit.
+        display " correct and valid" with no advancing
+        if has-leading-zero(i) = 1 or has-trailing-zero(i) = 1 or has-trailing-lowerX(i) = 1 or has-trailing-upperX(i) = 1 then
+            display " with" with no advancing
+            if has-leading-zero(i) = 1 then
+                display " [leading zero]" with no advancing
+            end-if
+            if has-trailing-zero(i) = 1 then
+                display " [trailing zero]" with no advancing
+            end-if
+            if has-trailing-lowerX(i) = 1 then
+                display " [trailing lowercase x]" with no advancing
+            end-if
+            if has-trailing-upperX(i) = 1 then
+                display " [trailing uppercase X]" with no advancing
+            end-if
+        end-if
+        display space
+    end-if.
 
 readISBN.
     *> perform error checking for invalid input filename
@@ -145,15 +216,6 @@ readISBN.
     perform storeISBNs until feof=1.
     close input-file.
     subtract 1 from num-entries.
-    *> REMOVE FOR SUBMISSION checking whether ISBNs are being stored properly
-    *> display space.
-    *> perform displayISBNs 
-    *>     varying i from 1 by 1 
-    *>     until i > num-entries.
-
-*> REMOVE FOR SUBMISSION
-displayISBNs.
-    display "isbn(" i ") is " isbn-line(i).
 
 *> store all lines read in into string array/table of ISBNs
 storeISBNs.
