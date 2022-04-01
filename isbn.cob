@@ -79,12 +79,9 @@ evaluateISBN.
         until i > num-entries.
 
 isValid.
-    *> display space.
-    *> display "isValid".
-    
     *> reset after reading each ISBN
     move 0 to has-invalid-alpha(i).
-    move 0 to has-invalid-check(i).
+    *> move 0 to has-invalid-check(i).
     *> set the appropriate flags for any ISBN containing an invalid alphabetic char
     perform checkAlpha
         varying j from 1 by 1
@@ -109,11 +106,7 @@ checkLeadingAndTrailingChars.
         move 1 to has-trailing-upperX(i)
     end-if.
 
-*> get value of expected check digit for ISBN
 checkSUM.
-    *> display space.
-    *> display "checkSUM".
-
     *> STEP 1: calculate sum of the products of all digits multiplied by their place
     move 10 to k.
     move 0 to sum-for-check(i).
@@ -152,10 +145,6 @@ checkAlpha.
         else if j = 10 *> check digit
             if isbn-char(i,j) not = "X" and not = "x" then
                 move 1 to has-invalid-alpha(i)
-                move 1 to has-invalid-check(i)
-            else
-                move 0 to has-invalid-check(i)
-                move 0 to has-invalid-alpha(i) *> "X" and "x" are allowed for the check digit
             end-if
         end-if
     end-if.
@@ -163,11 +152,10 @@ checkAlpha.
 displayStatus.
     display isbn-line(i) with no advancing
     if has-invalid-alpha(i) = 1 then
-        *> 'incorrect' is used when a non-digit value (other than X/x for the check digit) is found.
-        if has-invalid-check(i) = 0 then
-            display " incorrect, contains a non-digit"
-        else
+        if isbn-char(i,10) is alphabetic and (isbn-char(i,10) is not = 'X' and not = 'x') then
             display " incorrect, contains a non-digit/X in check digit"
+        else
+            display " incorrect, contains a non-digit"
         end-if
     else if has-invalid-check(i) = 1 then
         *> 'invalid' is used when there is an unexpected check digit
