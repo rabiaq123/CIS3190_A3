@@ -30,6 +30,7 @@ working-storage section.
         03 isbn-char       pic x occurs 10 times.
 01 flags.                  *> when set to 1, ISBN is automatically incorrect
     02 has-invalid-alpha   pic 9 occurs 50 times.
+    02 has-invalid-c-alpha pic 9 occurs 50 times.
     02 has-invalid-check   pic 9 occurs 50 times.
     02 has-leading-zero    pic 9 occurs 50 times.
     02 has-trailing-zero   pic 9 occurs 50 times.
@@ -83,10 +84,11 @@ evaluateISBN.
 isValid.
     *> reset after reading each ISBN
     move 0 to has-invalid-alpha(i).
+    move 0 to has-invalid-c-alpha(i).
     *> set the appropriate flags for any ISBN containing an invalid alphabetic char
     perform checkAlpha
         varying j from 1 by 1
-        until j > 10 or has-invalid-alpha(i) = 1.
+        until j > 10.
 
 
 *> this paragraph doesn't get called explicitly, but 
@@ -148,9 +150,10 @@ checkAlpha.
     if isbn-char(i,j) is alphabetic then
         if j >= 1 and <= 9 then 
             move 1 to has-invalid-alpha(i)
-        else if j = 10 *> check digit
+        end-if
+        if j = 10 *> check digit
             if isbn-char(i,j) not = "X" and not = "x" then
-                move 1 to has-invalid-alpha(i)
+                move 1 to has-invalid-c-alpha(i)
             end-if
         end-if
     end-if.
@@ -158,18 +161,19 @@ checkAlpha.
 
 displayStatus.
     display isbn-line(i) with no advancing
-    if has-invalid-alpha(i) = 1 then
-        if isbn-char(i,10) is alphabetic and (isbn-char(i,10) is not = 'X' and not = 'x') then
-            display " incorrect, contains a non-digit/X in check digit"
-        else
+    if has-invalid-alpha(i) = 1 and has-invalid-c-alpha(i) = 1 then
+        display " incorrect, contains a non-digit in the first 9 spaces and a non-digit/X in check digit"
+    else if has-invalid-alpha(i) = 1 then
             display " incorrect, contains a non-digit"
-        end-if
+    else if has-invalid-c-alpha(i) = 1 then
+            display " incorrect, contains a non-digit/X in check digit"
     else if has-invalid-check(i) = 1 then
         *> 'invalid' is used when there is an unexpected check digit
         display " correct, but not valid (invalid check digit)"
     else
         perform displayCorrectAndValid
     end-if.
+
 
 *> display message corresponding to the flags set
 displayCorrectAndValid.
@@ -235,6 +239,7 @@ displayEndMessage.
     display "All ISBNs have been evaluated.".
     display "Exiting program...".
     display "------------------------------".
+    display space.
 
 
 displayProgramInfo.
