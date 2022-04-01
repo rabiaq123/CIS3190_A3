@@ -23,7 +23,7 @@ working-storage section.
 01 feof                    pic 9.
 01 i                       pic 9(2). *> iterator for entries
 01 j                       pic 9(2). *> iterator for characters within an entry 
-01 k                       pic 9(2) value 10. *> multiplier for ISBN digits when calculating expected check digit
+01 k                       pic 9(2). *> multiplier for ISBN digits when calculating expected check digit
 01 num-entries             pic 9(2).
 01 isbn-list.
     02 isbn-line           occurs 50 times.
@@ -36,7 +36,8 @@ working-storage section.
     02 has-trailing-upperX pic 9 occurs 50 times.
     02 has-trailing-lowerX pic 9 occurs 50 times.
 01 check-vars.             *> one element allocated for every ISBN
-    02 sum-for-check       pic 9(2) occurs 50 times value 0. *> step one of calculating expected check digit value
+    02 sum-for-check       pic 9(3) occurs 50 times value 0. *> step one of calculating expected check digit value
+    02 product-for-check   pic 9(3) value 0. *> used to calculate sum-for-check
     02 mod-for-check       pic 9(2) occurs 50 times value 0. *> step two of calculating expected check digit value
     02 expected-check      pic 9(2) occurs 50 times value 0.
 01 file-info.
@@ -55,6 +56,8 @@ working-storage section.
 *> RESOURCES USED ---------------------------------------------------------------------------
 *> error handling for non-existant input files: inspired by prof's blog post on  
     *> https://craftofcoding.wordpress.com/2021/03/22/coding-cobol-checking-a-file-exists/
+*> handling check digit exception for when x mod 11 gives 0: inspired by site shared by prof
+    *> https://bisg.org/page/conversionscalculat/Conversion--Calculations-.htm.
 
 
 procedure division.
@@ -106,56 +109,41 @@ checkLeadingAndTrailingChars.
         move 1 to has-trailing-upperX(i)
     end-if.
 
-    *> perform varying j from 1 by 1 until j > 10
-    *>     if isbn-char(i,j) is numeric then
-    *>         *> first or check digit is 0
-    *>         if isbn-char(i,j) = 0 then
-    *>             if j = 1 then
-    *>                 move 1 to has-leading-zero(i)
-    *>             else if j = 10 then
-    *>                 move 1 to has-trailing-zero(i)
-    *>             end-if
-    *>         end-if
-    *>     else
-    *>         if j = 10 then
-    *>             *> X/x is check digit
-    *>             if isbn-char(i,j) = 'x' then
-    *>                 display "check x"
-    *>                 move 1 to has-trailing-lowerX(i)
-    *>             else if isbn-char(i,j) = 'X' then
-    *>                 display "check x"
-    *>                 move 1 to has-trailing-upperX(i)
-    *>             end-if
-    *>         end-if
-    *>     end-if
-    *> end-perform.
-
 *> get value of expected check digit for ISBN
 checkSUM.
     *> display space.
     *> display "checkSUM".
 
-    *> NOTE that a remainder of 0 means 0 should be the check digit,
-    *> according to https://bisg.org/page/conversionscalculat/Conversion--Calculations-.htm.
+    *> STEP 1: calculate sum of the products of all digits multiplied by their place
+    move 10 to k.
+    move 0 to sum-for-check(i).
+    perform varying j from 1 by 1 until j > 9
+        compute product-for-check = k * function numval(isbn-char(i,j))
+        compute sum-for-check(i) = sum-for-check(i) + product-for-check
+        display k " * " isbn-char(i,j) " = " product-for-check
+        subtract 1 from k
+    end-perform.
+    display "num " i " is " isbn-line(i).
+    display "sum for num " i " is " sum-for-check(i).
+    *> STEP 2: calculate remainder on division of sum by 11
+    compute mod-for-check(i) = function mod(sum-for-check(i),11). *> if 0, check digit is expected to be 0 as well
+    display "expected mod result for num " i " is " mod-for-check(i).
+    *> STEP 3: get expected check digit
+    compute expected-check(i) = 11 - mod-for-check(i).
+    display "expected check for num " i " is " expected-check(i).
 
-    *> *> calculate expected check digit
-    *> perform varying j from 1 by 1 until j > 9
-    *>     *> STEP 1: calculate sum of the products of all digits multiplied by their place
-    *>     compute sum-for-check(i) = k * function numval(isbn-char(i,j))
-    *>     subtract 1 from k
-    *>     *> STEP 2: calculate remainder on division of sum by 11
-    *>     compute mod-for-check(i) = function mod(sum-for-check(i),11)
-    *>     *> STEP 3: get expected check digit
-    *>     compute expected-check(i) = 11 - mod-for-check(i)
-    *> end-perform.
-    *> *> set invalid check flag to 1 when expected check digit doesn't match check digit in ISBN
-    *> if expected-check(i) = function numval(isbn-char(i,j)) then
-    *>     move 0 to has-invalid-check(i)
-    *> else if expected-check(i) = 10 and (isbn-char(i,10) = "X" or = "x") then
-    *>     move 0 to has-invalid-check(i)
-    *> else
-    *>     move 1 to has-invalid-check(i)
-    *> end-if.
+    *> set invalid check flag to 1 when expected check digit doesn't match check digit in ISBN
+    if mod-for-check(i) = 0 and function numval(isbn-char(i,10)) = 0 then
+        move 0 to has-invalid-check(i)
+    else
+        if expected-check(i) = function numval(isbn-char(i,10)) then
+            move 0 to has-invalid-check(i)
+        else if expected-check(i) = 10 and (isbn-char(i,10) = 'X' or = 'x') then
+            move 0 to has-invalid-check(i)
+        else
+            move 1 to has-invalid-check(i)
+        end-if
+    end-if.
 
 checkAlpha.
     if isbn-char(i,j) is alphabetic then
