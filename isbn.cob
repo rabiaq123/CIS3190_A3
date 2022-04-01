@@ -67,6 +67,7 @@ procedure division.
     perform displayEndMessage.
 stop run.
 
+
 evaluateISBN.
     display space.
     *> loop through the following paragraphs for every ISBN
@@ -78,21 +79,26 @@ evaluateISBN.
         varying i from 1 by 1
         until i > num-entries.
 
+
 isValid.
     *> reset after reading each ISBN
     move 0 to has-invalid-alpha(i).
-    *> move 0 to has-invalid-check(i).
     *> set the appropriate flags for any ISBN containing an invalid alphabetic char
     perform checkAlpha
         varying j from 1 by 1
         until j > 10 or has-invalid-alpha(i) = 1.
 
+
+*> this paragraph doesn't get called explicitly, but 
+*> running `perform isValid through checkSUM` in evaluateISBN allows it to be called every iteration of the loop,
+*> since any paragraph between (and including) isValid and checkSUM would be executed with that perform statement.
 checkLeadingAndTrailingChars.
+    *> reset after reading each ISBN
     move 0 to has-leading-zero(i).
     move 0 to has-trailing-zero(i).
     move 0 to has-trailing-upperX(i).
     move 0 to has-trailing-lowerX(i).
-
+    *> set the appropriate flags for any ISBN containing trailing/leading Xs or 0s
     if isbn-char(i,1) = 0 then
         move 1 to has-leading-zero(i)
     end-if.
@@ -106,25 +112,9 @@ checkLeadingAndTrailingChars.
         move 1 to has-trailing-upperX(i)
     end-if.
 
-checkSUM.
-    *> STEP 1: calculate sum of the products of all digits multiplied by their place
-    move 10 to k.
-    move 0 to sum-for-check(i).
-    perform varying j from 1 by 1 until j > 9
-        compute product-for-check = k * function numval(isbn-char(i,j))
-        compute sum-for-check(i) = sum-for-check(i) + product-for-check
-        display k " * " isbn-char(i,j) " = " product-for-check
-        subtract 1 from k
-    end-perform.
-    display "num " i " is " isbn-line(i).
-    display "sum for num " i " is " sum-for-check(i).
-    *> STEP 2: calculate remainder on division of sum by 11
-    compute mod-for-check(i) = function mod(sum-for-check(i),11). *> if 0, check digit is expected to be 0 as well
-    display "expected mod result for num " i " is " mod-for-check(i).
-    *> STEP 3: get expected check digit
-    compute expected-check(i) = 11 - mod-for-check(i).
-    display "expected check for num " i " is " expected-check(i).
 
+checkSUM.
+    perform calculateExpectedCheck.
     *> set invalid check flag to 1 when expected check digit doesn't match check digit in ISBN
     if mod-for-check(i) = 0 and function numval(isbn-char(i,10)) = 0 then
         move 0 to has-invalid-check(i)
@@ -138,6 +128,22 @@ checkSUM.
         end-if
     end-if.
 
+
+calculateExpectedCheck.
+    *> STEP 1: calculate sum of the products of all digits multiplied by their place
+    move 10 to k.
+    move 0 to sum-for-check(i).
+    perform varying j from 1 by 1 until j > 9
+        compute product-for-check = k * function numval(isbn-char(i,j))
+        compute sum-for-check(i) = sum-for-check(i) + product-for-check
+        subtract 1 from k
+    end-perform.
+    *> STEP 2: calculate remainder on division of sum by 11
+    compute mod-for-check(i) = function mod(sum-for-check(i),11). *> if 0, check digit is expected to be 0 as well
+    *> STEP 3: get expected check digit
+    compute expected-check(i) = 11 - mod-for-check(i).
+
+
 checkAlpha.
     if isbn-char(i,j) is alphabetic then
         if j >= 1 and <= 9 then 
@@ -148,6 +154,7 @@ checkAlpha.
             end-if
         end-if
     end-if.
+
 
 displayStatus.
     display isbn-line(i) with no advancing
@@ -161,25 +168,30 @@ displayStatus.
         *> 'invalid' is used when there is an unexpected check digit
         display " correct, but not valid (invalid check digit)"
     else
-        *> 'correct' is used when there is no invalid usage of a non-digit.
-        display " correct and valid" with no advancing
-        if has-leading-zero(i) = 1 or has-trailing-zero(i) = 1 or has-trailing-lowerX(i) = 1 or has-trailing-upperX(i) = 1 then
-            display " with" with no advancing
-            if has-leading-zero(i) = 1 then
-                display " [leading zero]" with no advancing
-            end-if
-            if has-trailing-zero(i) = 1 then
-                display " [trailing zero]" with no advancing
-            end-if
-            if has-trailing-lowerX(i) = 1 then
-                display " [trailing lowercase x]" with no advancing
-            end-if
-            if has-trailing-upperX(i) = 1 then
-                display " [trailing uppercase X]" with no advancing
-            end-if
-        end-if
-        display space
+        perform displayCorrectAndValid
     end-if.
+
+*> display message corresponding to the flags set
+displayCorrectAndValid.
+    *> 'correct' is used when there is no invalid usage of a non-digit.
+    display " correct and valid" with no advancing
+    if has-leading-zero(i) = 1 or has-trailing-zero(i) = 1 or has-trailing-lowerX(i) = 1 or has-trailing-upperX(i) = 1 then
+        display " with" with no advancing
+        if has-leading-zero(i) = 1 then
+            display " [leading zero]" with no advancing
+        end-if
+        if has-trailing-zero(i) = 1 then
+            display " [trailing zero]" with no advancing
+        end-if
+        if has-trailing-lowerX(i) = 1 then
+            display " [trailing lowercase x]" with no advancing
+        end-if
+        if has-trailing-upperX(i) = 1 then
+            display " [trailing uppercase X]" with no advancing
+        end-if
+    end-if.
+    display space.
+
 
 readISBN.
     *> perform error checking for invalid input filename
@@ -193,6 +205,7 @@ readISBN.
     close input-file.
     subtract 1 from num-entries.
 
+
 *> store all lines read in into string array/table of ISBNs
 storeISBNs.
     read input-file at end move 1 to feof
@@ -201,10 +214,12 @@ storeISBNs.
             add 1 to num-entries
     end-read.
 
+
 getFilename.
     display "Enter the filename to read ISBNs from: " with no advancing.
     accept ws-fname.
     perform checkFileExists.
+
 
 checkFileExists.
     call "CBL_CHECK_FILE_EXIST" using ws-fname file-info.
@@ -213,12 +228,14 @@ checkFileExists.
         display "Error: File does not exist."
     end-if.
 
+
 displayEndMessage.
     display space.
     display "------------------------------".
     display "All ISBNs have been evaluated.".
     display "Exiting program...".
     display "------------------------------".
+
 
 displayProgramInfo.
     display space.
